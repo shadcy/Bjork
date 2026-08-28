@@ -1,5 +1,7 @@
 ### B-spline Parameterized Joint Optimization of Reconstruction and K-space Trajectories (BJORK) for Accelerated 2D MRI
 
+> **New to BJORK?** [MIRTorch](https://github.com/guanhuaw/MIRTorch) now natively supports efficient gradients with respect to sampling trajectories. Its [compact, runnable BJORK-/SNOPY-style trajectory-optimization tutorial](https://github.com/guanhuaw/MIRTorch/blob/master/examples/demo_trajectory_optimization.ipynb) demonstrates the core method in a small 2D example; this repository contains the original BJORK research implementation and B-spline trajectory parameterization used for the paper.
+
 This repo provides a PyTorch-based reimplementation of 'B-spline Parameterized Joint Optimization of Reconstruction and K-space Trajectories (BJORK) for Accelerated 2D MRI' and 'Efficient approximation of Jacobian matrices involving a non-uniform fast Fourier transform (NUFFT)'.
 
 Since researchers' usually have personalized training pipeline, we currently provide the key components, the B-spline parameterization of trajectory and the efficient calculation of NUFFT Jacobian here. You may plug it into your own training modules with minimal modifications. However, if the demands for a runnable, self-contained code are high (please open an issue if needed), we will also provide whole package. 
@@ -48,4 +50,3 @@ This reimplementation uses the [torchkbnufft](https://github.com/mmuckley/torchk
   note = {Source code available at https://github.com/mmuckley/torchkbnufft}.
 }
 ```
-
