@@ -429,32 +429,102 @@ def plot_training_dynamics(
     print(f"Saved training dynamics map to: {save_path}")
 
 
+def visualize_experiment_run(results_dir):
+    """
+    Loads genuine saved .npy reconstruction arrays and metrics.json from real experiment run
+    and renders publication-grade figures using the #2373F4 and gray palette.
+    """
+    import json
+    recon_dir = os.path.join(results_dir, "reconstructions")
+    metrics_json_path = os.path.join(results_dir, "metrics.json")
+
+    if not os.path.exists(recon_dir):
+        print(f"Reconstructions directory not found: {recon_dir}")
+        return
+
+    target_files = [f for f in os.listdir(recon_dir) if f.startswith("target_") and f.endswith(".npy")]
+    if not target_files:
+        print(f"No target reconstruction files found in {recon_dir}")
+        return
+
+    target_file = target_files[0]
+    stem = target_file.replace("target_", "").replace(".npy", "")
+    targ_path = os.path.join(recon_dir, f"target_{stem}.npy")
+    zf_path = os.path.join(recon_dir, f"zerofill_{stem}.npy")
+    recon_path = os.path.join(recon_dir, f"trained_recon_{stem}.npy")
+
+    print(f"Loading real knee reconstruction arrays for slice: {stem}")
+    targ = np.load(targ_path)
+    zf = np.load(zf_path)
+    recon = np.load(recon_path)
+
+    metrics = {}
+    if os.path.exists(metrics_json_path):
+        with open(metrics_json_path, "r") as f:
+            data = json.load(f)
+            metrics = {
+                "Zero-Filled (R=4)": {
+                    "psnr": data.get("zero_filled_baseline", {}).get("mean_psnr_db", 0.0),
+                    "ssim": data.get("zero_filled_baseline", {}).get("mean_ssim", 0.0),
+                    "nmse": data.get("zero_filled_baseline", {}).get("mean_nmse", 0.0),
+                },
+                "Trained MoDL (1 Ep)": {
+                    "psnr": data.get("trained_reconstruction", {}).get("mean_psnr_db", 0.0),
+                    "ssim": data.get("trained_reconstruction", {}).get("mean_ssim", 0.0),
+                    "nmse": data.get("trained_reconstruction", {}).get("mean_nmse", 0.0),
+                }
+            }
+
+    recons_dict = {
+        "Zero-Filled (R=4)": zf,
+        "Trained MoDL (1 Ep)": recon,
+    }
+
+    out_recon_map = os.path.join(results_dir, "reconstruction_comparison_error_map.png")
+    plot_reconstruction_error_map(targ, recons_dict, metrics, error_scale=5.0, save_path=out_recon_map)
+
+    out_roi_map = os.path.join(results_dir, "roi_zoom_and_line_profile.png")
+    plot_roi_detailed_map(targ, recons_dict, save_path=out_roi_map)
+
+    print("\n" + "=" * 65)
+    print(" Visualization Suite Generated Successfully! ")
+    print("=" * 65)
+    print(f"  1. Reconstruction & Error Map : {out_recon_map}")
+    print(f"  2. ROI Zoom & Profile Map     : {out_roi_map}")
+    print("=" * 65)
+
+
 if __name__ == "__main__":
-    print("Testing publication plot suite with #2373F4 and gray palette...")
-    from traj_utils import generate_radial_trajectory, generate_spiral_trajectory
+    import argparse
+    parser = argparse.ArgumentParser(description="Render publication visualizations")
+    parser.add_argument("--results-dir", type=str, default="results/knee_first_run",
+                        help="Path to results directory containing metrics.json and reconstructions/")
+    args = parser.parse_args()
 
-    # 1. Trajectory plot
-    ti = generate_radial_trajectory(num_shots=16, nfe=256, golden_angle=True)
-    to = generate_spiral_trajectory(num_shots=16, nfe=256)
-    grad = np.random.uniform(0.5, 3.8, (16, 64))
-    slew = np.random.uniform(2000, 14000, (16, 64))
-    plot_trajectory_detailed_map(ti, to, grad, slew, save_path="test_plots/trajectory_analysis.png")
+    if os.path.exists(os.path.join(args.results_dir, "reconstructions")):
+        visualize_experiment_run(args.results_dir)
+    else:
+        print(f"No experiment reconstructions found in {args.results_dir}. Running self-test...")
+        from traj_utils import generate_radial_trajectory, generate_spiral_trajectory
 
-    # 2. Reconstruction error map
-    targ_mag = np.random.rand(128, 128).astype(np.float32)
-    # Synthesize noisy reconstructions
-    recon_dict = {
-        "Zero-Filled": np.clip(targ_mag + 0.12 * np.random.randn(*targ_mag.shape), 0, None),
-        "Radial CG-SENSE": np.clip(targ_mag + 0.05 * np.random.randn(*targ_mag.shape), 0, None),
-        "BJORK MoDL": np.clip(targ_mag + 0.015 * np.random.randn(*targ_mag.shape), 0, None),
-    }
-    metrics_dict = {
-        "Zero-Filled": {"psnr": 22.45, "ssim": 0.612, "nmse": 0.128},
-        "Radial CG-SENSE": {"psnr": 29.80, "ssim": 0.835, "nmse": 0.024},
-        "BJORK MoDL": {"psnr": 34.12, "ssim": 0.928, "nmse": 0.008},
-    }
-    plot_reconstruction_error_map(targ_mag, recon_dict, metrics_dict, error_scale=5.0, save_path="test_plots/reconstruction_comparison_error_map.png")
+        ti = generate_radial_trajectory(num_shots=16, nfe=256, golden_angle=True)
+        to = generate_spiral_trajectory(num_shots=16, nfe=256)
+        grad = np.random.uniform(0.5, 3.8, (16, 64))
+        slew = np.random.uniform(2000, 14000, (16, 64))
+        plot_trajectory_detailed_map(ti, to, grad, slew, save_path="test_plots/trajectory_analysis.png")
 
-    # 3. ROI Zoom and Line Profile map
-    plot_roi_detailed_map(targ_mag, recon_dict, save_path="test_plots/roi_zoom_and_line_profile.png")
-    print("All test plots generated successfully in ./test_plots/!")
+        targ_mag = np.random.rand(128, 128).astype(np.float32)
+        recon_dict = {
+            "Zero-Filled": np.clip(targ_mag + 0.12 * np.random.randn(*targ_mag.shape), 0, None),
+            "Radial CG-SENSE": np.clip(targ_mag + 0.05 * np.random.randn(*targ_mag.shape), 0, None),
+            "BJORK MoDL": np.clip(targ_mag + 0.015 * np.random.randn(*targ_mag.shape), 0, None),
+        }
+        metrics_dict = {
+            "Zero-Filled": {"psnr": 22.45, "ssim": 0.612, "nmse": 0.128},
+            "Radial CG-SENSE": {"psnr": 29.80, "ssim": 0.835, "nmse": 0.024},
+            "BJORK MoDL": {"psnr": 34.12, "ssim": 0.928, "nmse": 0.008},
+        }
+        plot_reconstruction_error_map(targ_mag, recon_dict, metrics_dict, error_scale=5.0, save_path="test_plots/reconstruction_comparison_error_map.png")
+        plot_roi_detailed_map(targ_mag, recon_dict, save_path="test_plots/roi_zoom_and_line_profile.png")
+        print("Test plots generated successfully in ./test_plots/!")
+
