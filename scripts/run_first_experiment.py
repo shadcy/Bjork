@@ -18,6 +18,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+# Disable cuDNN to use native PyTorch CUDA kernels (bypasses CUDNN_STATUS_NOT_INITIALIZED on cluster)
+if hasattr(torch.backends, "cudnn"):
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.benchmark = False
+
 try:
     import h5py
 except ImportError:
