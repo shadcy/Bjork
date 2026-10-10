@@ -253,7 +253,7 @@ class ManifestKneeDataset(torch.utils.data.Dataset):
 # ==============================================================================
 # Main Experiment Execution Pipeline
 # ==============================================================================
-def run_experiment(config_path):
+def run_experiment(config_path, epochs_override=None):
     print("=" * 70)
     print("   FAST-MRI MULTI-COIL KNEE: END-TO-END EXPERIMENT (R=4)   ")
     print("=" * 70)
@@ -318,44 +318,68 @@ def run_experiment(config_path):
     optimizer = optim.Adam(model.parameters(), lr=cfg["training"]["lr_recon"])
     criterion = nn.L1Loss()
 
-    # 4. Training (1 Epoch)
-    print("\n--- Training (1 Epoch) ---")
-    model.train()
-    running_loss = 0.0
-    epoch_start = time.time()
+    # 4. Multi-Epoch Training Loop
+    num_epochs = epochs_override or cfg["training"].get("epochs", 30)
+    print(f"\n--- Training ({num_epochs} Epochs) ---")
+    
+    epoch_history = []
+    total_train_start = time.time()
 
-    for step, (Iref, smaps, fname, sidx) in enumerate(train_loader):
-        Iref = Iref.to(device)
-        smaps = smaps.to(device)
+    for epoch in range(1, num_epochs + 1):
+        model.train()
+        running_loss = 0.0
+        epoch_start = time.time()
 
-        optimizer.zero_grad()
-        out = model(Iref, smaps, mask_t)
-        loss = criterion(out["recon"], Iref)
-        loss.backward()
+        for step, (Iref, smaps, fname, sidx) in enumerate(train_loader):
+            Iref = Iref.to(device)
+            smaps = smaps.to(device)
 
-        if cfg["training"].get("gradient_clip", 0) > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=cfg["training"]["gradient_clip"])
+            optimizer.zero_grad()
+            out = model(Iref, smaps, mask_t)
+            loss = criterion(out["recon"], Iref)
+            loss.backward()
 
-        optimizer.step()
-        running_loss += loss.item()
+            if cfg["training"].get("gradient_clip", 0) > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=cfg["training"]["gradient_clip"])
 
-        if (step + 1) % cfg["training"].get("log_interval", 5) == 0 or (step + 1) == len(train_loader):
-            print(f"  Step [{step+1}/{len(train_loader)}] Loss: {loss.item():.5f}")
+            optimizer.step()
+            running_loss += loss.item()
 
-    avg_train_loss = running_loss / max(1, len(train_loader))
-    epoch_duration = time.time() - epoch_start
-    print(f"Epoch 1 Complete: Avg Train Loss = {avg_train_loss:.5f} ({epoch_duration:.1f}s)")
+            if (step + 1) % cfg["training"].get("log_interval", 10) == 0 or (step + 1) == len(train_loader):
+                print(f"  Epoch [{epoch:2d}/{num_epochs}] Step [{step+1:2d}/{len(train_loader)}] Loss: {loss.item():.5f}")
 
-    # Save model checkpoint
-    ckpt_path = os.path.join(results_dir, "checkpoint_epoch_1.pth")
+        avg_train_loss = running_loss / max(1, len(train_loader))
+        epoch_duration = time.time() - epoch_start
+        print(f"Epoch [{epoch:2d}/{num_epochs}] Complete: Train Loss = {avg_train_loss:.5f} ({epoch_duration:.1f}s)")
+
+        epoch_history.append({
+            "epoch": epoch,
+            "train_loss": float(avg_train_loss),
+            "duration_s": float(epoch_duration)
+        })
+
+        # Save milestone checkpoints
+        if epoch == 1 or epoch == num_epochs or epoch % 10 == 0:
+            ckpt_path = os.path.join(results_dir, f"checkpoint_epoch_{epoch}.pth")
+            torch.save({
+                "epoch": epoch,
+                "model_state": model.state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+                "train_loss": avg_train_loss,
+                "config": cfg,
+            }, ckpt_path)
+            print(f"  [Checkpoint] Saved: {ckpt_path}")
+
+    # Save final model checkpoint
+    ckpt_final_path = os.path.join(results_dir, "checkpoint_final.pth")
     torch.save({
-        "epoch": 1,
+        "epoch": num_epochs,
         "model_state": model.state_dict(),
         "optimizer_state": optimizer.state_dict(),
         "train_loss": avg_train_loss,
+        "epoch_history": epoch_history,
         "config": cfg,
-    }, ckpt_path)
-    print(f"Saved model checkpoint to: {ckpt_path}")
+    }, ckpt_final_path)
 
     # 5. Validation on Held-Out Volumes
     print("\n--- Validation on Held-Out Volume ---")
@@ -462,15 +486,45 @@ def run_experiment(config_path):
         f.write("| Method | PSNR (dB) | SSIM | NMSE |\n")
         f.write("| :--- | :---: | :---: | :---: |\n")
         f.write(f"| Zero-Filled Adjoint Baseline | {mean_metrics['zero_filled_baseline']['mean_psnr_db']:.2f} | {mean_metrics['zero_filled_baseline']['mean_ssim']:.4f} | {mean_metrics['zero_filled_baseline']['mean_nmse']:.6f} |\n")
-        f.write(f"| Trained MoDL (Epoch 1) | **{mean_metrics['trained_reconstruction']['mean_psnr_db']:.2f}** | **{mean_metrics['trained_reconstruction']['mean_ssim']:.4f}** | **{mean_metrics['trained_reconstruction']['mean_nmse']:.6f}** |\n\n")
+        f.write(f"| Trained MoDL (Epoch {num_epochs}) | **{mean_metrics['trained_reconstruction']['mean_psnr_db']:.2f}** | **{mean_metrics['trained_reconstruction']['mean_ssim']:.4f}** | **{mean_metrics['trained_reconstruction']['mean_nmse']:.6f}** |\n\n")
         f.write("## Status\n")
         f.write("All metrics computed strictly from genuine executed forward/backward passes on real multi-coil knee data.\n")
+
+    # Generate training loss convergence curve
+    if len(epoch_history) > 1:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            
+            fig, ax = plt.subplots(figsize=(8, 4.5), dpi=200)
+            fig.patch.set_facecolor("#0B0F17")
+            ax.set_facecolor("#151B26")
+            for spine in ax.spines.values():
+                spine.set_color("#283347")
+            ax.tick_params(colors="#8896AB")
+            
+            ep_x = [h["epoch"] for h in epoch_history]
+            loss_y = [h["train_loss"] for h in epoch_history]
+            ax.plot(ep_x, loss_y, color="#2373F4", linewidth=2.5, marker="o", markersize=4, label="Training Loss (L1)")
+            ax.set_title(f"Training Loss Convergence ({num_epochs} Epochs, fastMRI Knee R=4)", color="#E2E8F0", fontsize=12, fontweight="bold")
+            ax.set_xlabel("Epoch", color="#E2E8F0")
+            ax.set_ylabel("Loss", color="#E2E8F0")
+            ax.grid(True, color="#1E2738", linestyle="--", alpha=0.7)
+            ax.legend(facecolor="#151B26", edgecolor="#283347", labelcolor="#E2E8F0")
+            plt.tight_layout()
+            curve_path = os.path.join(results_dir, "training_convergence.png")
+            plt.savefig(curve_path, facecolor=fig.get_facecolor(), edgecolor="none")
+            plt.close()
+            print(f"Saved training loss convergence curve to: {curve_path}")
+        except Exception as e:
+            print(f"Note: Could not save training curve: {e}")
 
     print("\n" + "=" * 70)
     print("                    EXPERIMENT COMPLETE                    ")
     print("=" * 70)
     print(f"Zero-Filled Baseline : PSNR = {mean_metrics['zero_filled_baseline']['mean_psnr_db']:.2f} dB | SSIM = {mean_metrics['zero_filled_baseline']['mean_ssim']:.4f}")
-    print(f"Trained MoDL (1 Ep)  : PSNR = {mean_metrics['trained_reconstruction']['mean_psnr_db']:.2f} dB | SSIM = {mean_metrics['trained_reconstruction']['mean_ssim']:.4f}")
+    print(f"Trained MoDL ({num_epochs} Ep) : PSNR = {mean_metrics['trained_reconstruction']['mean_psnr_db']:.2f} dB | SSIM = {mean_metrics['trained_reconstruction']['mean_ssim']:.4f}")
     print(f"Saved results to     : {results_dir}")
     print("=" * 70)
 
@@ -478,8 +532,9 @@ def run_experiment(config_path):
 def main():
     parser = argparse.ArgumentParser(description="Run first end-to-end knee experiment")
     parser.add_argument("--config", type=str, default="configs/knee_first_run.yaml", help="Path to config YAML")
+    parser.add_argument("--epochs", type=int, default=None, help="Override number of epochs")
     args = parser.parse_args()
-    run_experiment(args.config)
+    run_experiment(args.config, epochs_override=args.epochs)
 
 
 if __name__ == "__main__":

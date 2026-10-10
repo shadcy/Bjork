@@ -81,9 +81,13 @@ else
     echo "Using existing manifests from data/manifests/knee_first_run/"
 fi
 
-# 5. Execute 1-Epoch Experiment & Evaluation
-echo "Launching 1-Epoch Experiment..."
+# 5. Execute Multi-Epoch Experiment & Evaluation
+echo "Launching Multi-Epoch Training Experiment..."
 "$PYTHON_BIN" scripts/run_first_experiment.py --config configs/knee_first_run.yaml
+
+# 6. Auto-render Publication Visualizations
+echo "Rendering publication figures..."
+"$PYTHON_BIN" visualize_results.py --results-dir results/knee_first_run
 
 echo "=========================================================="
 echo " Job Completed Successfully at: $(date)"
