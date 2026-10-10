@@ -458,6 +458,21 @@ def visualize_experiment_run(results_dir):
     zf = np.load(zf_path)
     recon = np.load(recon_path)
 
+    # Detect number of epochs from configuration
+    epochs_label = "30 Ep"
+    cfg_path = os.path.join(results_dir, "run_config.yaml")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r") as f:
+                import yaml
+                run_cfg = yaml.safe_load(f)
+                num_ep = run_cfg.get("training", {}).get("epochs", 30)
+                epochs_label = f"{num_ep} Ep"
+        except Exception:
+            pass
+
+    recon_label = f"Trained MoDL ({epochs_label})"
+
     metrics = {}
     if os.path.exists(metrics_json_path):
         with open(metrics_json_path, "r") as f:
@@ -468,7 +483,7 @@ def visualize_experiment_run(results_dir):
                     "ssim": data.get("zero_filled_baseline", {}).get("mean_ssim", 0.0),
                     "nmse": data.get("zero_filled_baseline", {}).get("mean_nmse", 0.0),
                 },
-                "Trained MoDL (1 Ep)": {
+                recon_label: {
                     "psnr": data.get("trained_reconstruction", {}).get("mean_psnr_db", 0.0),
                     "ssim": data.get("trained_reconstruction", {}).get("mean_ssim", 0.0),
                     "nmse": data.get("trained_reconstruction", {}).get("mean_nmse", 0.0),
@@ -477,7 +492,7 @@ def visualize_experiment_run(results_dir):
 
     recons_dict = {
         "Zero-Filled (R=4)": zf,
-        "Trained MoDL (1 Ep)": recon,
+        recon_label: recon,
     }
 
     out_recon_map = os.path.join(results_dir, "reconstruction_comparison_error_map.png")

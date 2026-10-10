@@ -442,7 +442,8 @@ def run_experiment(config_path, epochs_override=None):
         "val_volumes": [v["filename"] for v in val_ds.volumes],
         "train_slices_used": len(train_ds),
         "val_slices_used": len(val_ds),
-        "training_loss_epoch_1": float(avg_train_loss),
+        "total_epochs": num_epochs,
+        "final_training_loss": float(avg_train_loss),
         "zero_filled_baseline": {
             "mean_psnr_db": float(np.mean(zf_psnr_list)),
             "mean_ssim": float(np.mean(zf_ssim_list)),
