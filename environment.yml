@@ -1,0 +1,18 @@
+name: bjork
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy>=1.21.0
+  - scipy>=1.7.0
+  - matplotlib
+  - h5py
+  - scikit-image
+  - tqdm
+  - pip:
+      - torchkbnufft>=1.4.0
+      - mirtorch>=0.1.0

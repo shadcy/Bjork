@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyTorch checkpoints and training outputs
+checkpoints/
+logs/
+eval_results/
+*.pth
+*.pt
+
+# Trajectories and cached data
+*.npy
+*.npz
+*.h5
+data/
+results/
+
+# Plots and results
+test_plots/
+preliminary_results/
+*.png
+
+# OS & IDE
+.vscode/
+.idea/
+*.swp
+*.DS_Store

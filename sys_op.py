@@ -1,17 +1,16 @@
 import torch
 from torch import Tensor
 from typing import Union, Sequence
-from mirtorch.alg import CG, FISTA, POGM, power_iter
-from mirtorch.linear import LinearMap, FFTCn, NuSense, Sense, FFTCn, Identity, Diff2dgram, Gmri, Wavelet2D, \
-    NuSenseGram, Diff3dgram
+from mirtorch.alg import CG
+from mirtorch.linear import LinearMap, NuSense, Identity, NuSenseGram
 
 
 class NuSense_om(LinearMap):
     '''
-    The operator $A$. Provides gradient w.r.t $x$ and $\omage$.
+    The operator $A$. Provides gradient w.r.t $x$ and $\omega$.
     Attributes:
         smaps: sensitivity maps in [nbatch, nc, nx, ny, (nz)]
-        traj: sampling trajectory in size [dim, npoints]
+        traj: sampling trajectory in size [dim, npoints] or [1, dim, npoints]
         norm: 'ortho' or None provided by torchkbnufft
         numpoints: number of interpolation points in nufft
         grid_size: oversampling rate in nufft
@@ -36,7 +35,6 @@ class NuSense_om(LinearMap):
 
             @staticmethod
             def backward(ctx, y):
-                # use in-plane opeators
                 ktraj, xforward = ctx.saved_tensors
                 dldom = torch.zeros_like(ktraj)
                 for i in range(len(im_size)):
@@ -55,8 +53,12 @@ class NuSense_om(LinearMap):
                     xrd = xforward * r
                     AFxr = ctx.A * xrd
                     del xrd
-                    dldwd = (torch.conj(AFxr.mul_(0 - 1j)).mul_(y)).real
-                    dldom[:, i, :] = torch.sum(torch.sum(dldwd, dim=1), dim=0)
+                    dldwd = (torch.conj(AFxr * (0 - 1j)) * y).real
+                    grad_i = torch.sum(torch.sum(dldwd, dim=1), dim=0)
+                    if dldom.ndim == 3:
+                        dldom[:, i, :] = grad_i
+                    else:
+                        dldom[i, :] = grad_i
                 return ctx.A.H * y, dldom, None
 
         self.forward_op = Aforward.apply
@@ -88,12 +90,19 @@ class NuSense_om(LinearMap):
                     diagrx = x * r
                     Adiagrx = ctx.A * diagrx
                     del diagrx
-                    dldwd = (Adiagrx.mul_(torch.conj(yforward) * (0 - 1j))).real
-                    dldom[:, i, :] = torch.sum(torch.sum(dldwd, dim=1), dim=0)
+                    dldwd = (Adiagrx * (torch.conj(yforward) * (0 - 1j))).real
+                    grad_i = torch.sum(torch.sum(dldwd, dim=1), dim=0)
+                    if dldom.ndim == 3:
+                        dldom[:, i, :] = grad_i
+                    else:
+                        dldom[i, :] = grad_i
                 return ctx.A * x, dldom, None
 
         self.adjoint_op = Aadjoint.apply
-        super(NuSense_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_out))
+        try:
+            super(NuSense_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_out), device=smaps.device)
+        except TypeError:
+            super(NuSense_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_out))
 
     def _apply(self, x):
         return self.forward_op(x, self.traj, self.A)
@@ -104,10 +113,10 @@ class NuSense_om(LinearMap):
 
 class NuSenseGram_om(LinearMap):
     '''
-    The Grame operator $A'A$, using the Toeplitz embedding. Provides gradient w.r.t x and omage
+    The Gram operator $A'A$, using the Toeplitz embedding. Provides gradient w.r.t x and omega
     Attributes:
         smaps: sensitivity maps in [nbatch, nc, nx, ny, (nz)]
-        traj: sampling trajectory in size [dim, npoints]
+        traj: sampling trajectory in size [dim, npoints] or [1, dim, npoints]
         norm: 'ortho' or None provided by torchkbnufft
         numpoints: number of interpolation points in nufft
         grid_size: oversampling rate in nufft
@@ -121,7 +130,6 @@ class NuSenseGram_om(LinearMap):
         self.traj = traj
         batchmode = True
         self.A = NuSense(smaps, traj, norm=norm, batchmode=True, numpoints=numpoints, grid_size=grid_size)
-        # self.AHA = self.A.H*self.A
         self.AHA = NuSenseGram(smaps, traj, norm=norm, batchmode=batchmode, numpoints=numpoints, grid_size=grid_size)
         im_size = smaps.shape[2:]
 
@@ -157,13 +165,20 @@ class NuSenseGram_om(LinearMap):
                     Axr = ctx.A * xr
                     Ardx = ctx.A * (r * dx)
                     del xr
-                    dldwd = (torch.conj(Axr).mul_(Adx).mul_(0 + 1j).add_(Ardx.mul_(torch.conj(Ax)).mul_((0 - 1j)))).real
-                    dldom[:, i, :] = torch.sum(torch.sum(dldwd, dim=1), dim=0)
+                    dldwd = (torch.conj(Axr) * Adx * (0 + 1j) + Ardx * torch.conj(Ax) * (0 - 1j)).real
+                    grad_i = torch.sum(torch.sum(dldwd, dim=1), dim=0)
+                    if dldom.ndim == 3:
+                        dldom[:, i, :] = grad_i
+                    else:
+                        dldom[i, :] = grad_i
                 return ctx.AHA * dx, dldom, None, None
 
         self.forward_op = Aforward.apply
 
-        super(NuSenseGram_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in))
+        try:
+            super(NuSenseGram_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in), device=smaps.device)
+        except TypeError:
+            super(NuSenseGram_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in))
 
     def _apply(self, x):
         return self.forward_op(x, self.traj, self.AHA, self.A)
@@ -174,10 +189,13 @@ class NuSenseGram_om(LinearMap):
 
 class Gram_inv(LinearMap):
     '''
-    The inverse operator $(A'A+\lambdaI(^{-1}$, using the conjugate gradient to resolve. Provides gradient w.r.t x and omage
+    The inverse operator $(A'A+\lambda I)^{-1}$, using conjugate gradient. Provides gradient w.r.t x and omega
     Attributes:
         smaps: sensitivity maps in [nbatch, nc, nx, ny, (nz)]
-        traj: sampling trajectory in size [dim, npoints]
+        traj: sampling trajectory in size [dim, npoints] or [1, dim, npoints]
+        lambd: regularization weight
+        tol: CG convergence tolerance
+        max_iter: max CG iterations
         norm: 'ortho' or None provided by torchkbnufft
         numpoints: number of interpolation points in nufft
         grid_size: oversampling rate in nufft
@@ -199,7 +217,6 @@ class Gram_inv(LinearMap):
         self.A = NuSense(smaps, traj, norm=norm, batchmode=batchmode, numpoints=numpoints, grid_size=grid_size)
         im_size = smaps.shape[2:]
         I = Identity(self.A.size_in)
-        # self.AHA = self.A.H*self.A + lambd * I
         self.AHA = NuSenseGram(smaps, traj, norm=norm, batchmode=batchmode, numpoints=numpoints, grid_size=grid_size) + lambd * I
         self.x0 = x0
         self.solver_forward = CG(self.AHA, max_iter=max_iter, tol=tol, alert=alert)
@@ -207,7 +224,6 @@ class Gram_inv(LinearMap):
         class Aforward(torch.autograd.Function):
             @staticmethod
             def forward(ctx, b, ktraj, A, solver_forward, x0):
-                # print('allocate before forward CG', torch.cuda.memory_allocated())
                 Pb = solver_forward.run(x0, b)
                 ctx.A = A
                 ctx.save_for_backward(ktraj, b, Pb)
@@ -240,28 +256,38 @@ class Gram_inv(LinearMap):
                     Pbr = Pb * r
                     APbr = ctx.A * Pbr
                     dldwd = (
-                        torch.conj(APbr).mul_((0 - 1j)).mul_(APdx).add_(APdxr.mul_(torch.conj(APb)).mul_(0 + 1j))).real
-                    dldom[:, i, :] = torch.sum(torch.sum(dldwd, dim=1), dim=0)
+                        torch.conj(APbr) * (0 - 1j) * APdx + APdxr * torch.conj(APb) * (0 + 1j)
+                    ).real
+                    grad_i = torch.sum(torch.sum(dldwd, dim=1), dim=0)
+                    if dldom.ndim == 3:
+                        dldom[:, i, :] = grad_i
+                    else:
+                        dldom[i, :] = grad_i
 
                 return Pdx, dldom, None, None, None
 
         self.forward_op = Aforward.apply
 
-        super(Gram_inv, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in))
+        try:
+            super(Gram_inv, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in), device=smaps.device)
+        except TypeError:
+            super(Gram_inv, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in))
 
     def _apply(self, x):
         if self.x0 is None:
-            x0 = torch.clone(x.detach())
+            x0 = torch.zeros_like(x)
         else:
             x0 = self.x0
         return self.forward_op(x, self.traj, self.A, self.solver_forward, x0)
 
     def _apply_adjoint(self, y):
         if self.x0 is None:
-            x0 = torch.clone(y.detach())
+            x0 = torch.zeros_like(y)
         else:
             x0 = self.x0
         return self.forward_op(y, self.traj, self.A, self.solver_forward, x0)
 
 
-
+# Aliases for compatibility with alternative script conventions
+NuSenseFrame_om = NuSenseGram_om
+Frame_inv = Gram_inv

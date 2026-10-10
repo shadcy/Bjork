@@ -1,0 +1,55 @@
+# Configuration for fastMRI Multi-Coil Knee First Run Experiment
+experiment:
+  name: "knee_first_run"
+  seed: 42
+  device: "cuda"
+  mixed_precision: false
+
+data:
+  data_dir: "/scratch/22b3926/fastmri_knee/multicoil_train"
+  manifest_dir: "data/manifests/knee_first_run"
+  im_size: [320, 320]
+  acs_size: [24, 24]
+  train_volumes: 3
+  val_volumes: 1
+  test_volumes: 1
+
+acquisition:
+  # Initial reproducible baseline: Cartesian R=4 equispaced undersampling
+  baseline_mode: "cartesian"
+  acceleration: 4
+  center_fraction: 0.08
+
+  # BJORK non-Cartesian trajectory parameters
+  num_shots: 16
+  nfe: 512
+  decim: 4
+  g_max: 4.0        # Gauss/cm
+  s_max: 15000.0    # Gauss/cm/s
+  lambda_g: 0.001
+  lambda_s: 0.0001
+
+model:
+  num_blocks: 4
+  modl_lambda: 0.05
+  modl_tol: 0.0001
+  cg_max_iter: 8
+  grid_size: 2.0
+  numpoints: 6
+  denoiser:
+    filters: 64
+    layers: 5
+
+training:
+  epochs: 1
+  batch_size: 1
+  lr_recon: 0.0001
+  lr_traj: 0.0005
+  gradient_clip: 1.0
+  log_interval: 5
+
+output:
+  results_dir: "results/knee_first_run"
+  checkpoint_dir: "results/knee_first_run/checkpoints"
+  reconstructions_dir: "results/knee_first_run/reconstructions"
+  logs_dir: "results/logs"
