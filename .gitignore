@@ -5,7 +5,8 @@ __pycache__/
 
 # PyTorch checkpoints and training outputs
 checkpoints/
-logs/
+logs/*
+!logs/.gitkeep
 eval_results/
 *.pth
 *.pt

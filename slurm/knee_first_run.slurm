@@ -6,35 +6,42 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=02:00:00
-#SBATCH --output=results/logs/knee_first_run_%j.out
-#SBATCH --error=results/logs/knee_first_run_%j.err
+#SBATCH --output=logs/knee_first_run_%j.out
+#SBATCH --error=logs/knee_first_run_%j.err
 
 set -e
+
+# Change to repository root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$SCRIPT_DIR"
 
 echo "=========================================================="
 echo " Starting FastMRI Knee First Run on PARAM Rudra A100 GPU "
 echo " Job ID: $SLURM_JOB_ID | Host: $(hostname)"
 echo " Start Time: $(date)"
+echo " Working Dir: $(pwd)"
 echo "=========================================================="
 
-mkdir -p results/logs results/knee_first_run
+# Create log and output directories
+mkdir -p logs results/logs results/knee_first_run results/knee_first_run/checkpoints results/knee_first_run/reconstructions
 
-# 1. Activate Private Conda Environment on Rudra
-CONDA_ENV_PATH="$HOME/.conda/envs/bjork"
-if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/miniconda3/etc/profile.d/conda.sh"
-elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/anaconda3/etc/profile.d/conda.sh"
-elif [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
-    source "/opt/conda/etc/profile.d/conda.sh"
+# 1. Robust Conda Environment & Python Setup
+if command -v conda &> /dev/null; then
+    eval "$(conda shell.bash hook 2>/dev/null || true)"
+    conda activate bjork 2>/dev/null || conda activate "$HOME/.conda/envs/bjork" 2>/dev/null || true
 fi
 
-conda activate "$CONDA_ENV_PATH" || source activate "$CONDA_ENV_PATH"
+# Fallback to direct environment PATH
+if [ -d "$HOME/.conda/envs/bjork/bin" ]; then
+    export PATH="$HOME/.conda/envs/bjork/bin:$PATH"
+fi
 
-echo "Using Python: $(which python)"
+PYTHON_BIN="$(which python)"
+echo "Using Python: $PYTHON_BIN"
+"$PYTHON_BIN" --version
 
 # 2. Strict Check for CUDA Availability
-python -c "
+"$PYTHON_BIN" -c "
 import torch, sys
 if not torch.cuda.is_available():
     print('ERROR: CUDA is not available on this compute node!', file=sys.stderr)
@@ -47,23 +54,25 @@ if [ $? -ne 0 ]; then
 fi
 
 # 3. Environment & Dependency Diagnostic
-python scripts/check_environment.py results/knee_first_run/environment.txt
+"$PYTHON_BIN" scripts/check_environment.py results/knee_first_run/environment.txt
 
-# 4. Prepare Manifests with Volume-Level Separation
-# Configurable DATA_DIR argument passed to sbatch or defaulted to /scratch/$USER/...
-DATA_DIR="${1:-/scratch/$USER/fastmri_knee/multicoil_train}"
+# 4. Prepare Manifests (if not already prepared)
+DATA_DIR="${1:-./data/fastmri_knee/multicoil_train}"
 echo "FastMRI Data Directory: $DATA_DIR"
 
-python scripts/prepare_fastmri_knee.py \
-    --data-dir "$DATA_DIR" \
-    --manifest-dir "data/manifests/knee_first_run" \
-    --num-train 3 \
-    --num-val 1 \
-    --num-test 1 \
-    --seed 42
+if [ ! -f "data/manifests/knee_first_run/train_manifest.json" ]; then
+    echo "Generating dataset manifests..."
+    "$PYTHON_BIN" scripts/prepare_fastmri_knee.py \
+        --data-dir "$DATA_DIR" \
+        --manifest-dir "data/manifests/knee_first_run" \
+        --seed 42
+else
+    echo "Using existing manifests from data/manifests/knee_first_run/"
+fi
 
 # 5. Execute 1-Epoch Experiment & Evaluation
-python scripts/run_first_experiment.py --config configs/knee_first_run.yaml
+echo "Launching 1-Epoch Experiment..."
+"$PYTHON_BIN" scripts/run_first_experiment.py --config configs/knee_first_run.yaml
 
 echo "=========================================================="
 echo " Job Completed Successfully at: $(date)"
