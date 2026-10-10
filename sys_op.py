@@ -3,7 +3,7 @@ from torch import Tensor
 from typing import Union, Sequence
 from mirtorch.alg import CG, FISTA, POGM, power_iter
 from mirtorch.linear import LinearMap, FFTCn, NuSense, Sense, FFTCn, Identity, Diff2dgram, Gmri, Wavelet2D, \
-    NuSenseGram, Diff3dGram
+    NuSenseGram, Diff3dgram
 
 
 class NuSense_om(LinearMap):
@@ -93,7 +93,7 @@ class NuSense_om(LinearMap):
                 return ctx.A * x, dldom, None
 
         self.adjoint_op = Aadjoint.apply
-        super(NuSense_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_out), device=smaps.device)
+        super(NuSense_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_out))
 
     def _apply(self, x):
         return self.forward_op(x, self.traj, self.A)
@@ -163,7 +163,7 @@ class NuSenseGram_om(LinearMap):
 
         self.forward_op = Aforward.apply
 
-        super(NuSenseGram_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in), device=smaps.device)
+        super(NuSenseGram_om, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in))
 
     def _apply(self, x):
         return self.forward_op(x, self.traj, self.AHA, self.A)
@@ -247,7 +247,7 @@ class Gram_inv(LinearMap):
 
         self.forward_op = Aforward.apply
 
-        super(Gram_inv, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in), device=smaps.device)
+        super(Gram_inv, self).__init__(tuple(self.A.size_in), tuple(self.A.size_in))
 
     def _apply(self, x):
         if self.x0 is None:
