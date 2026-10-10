@@ -108,10 +108,31 @@ def main():
                     break
 
     if not url:
+        if sys.stdin.isatty():
+            print("\n" + "=" * 65)
+            print(f" Presigned URL Required for Target: {args.target}")
+            print("=" * 65)
+            print("Please paste the presigned S3 download link from your fastMRI email:")
+            user_input = input("URL: ").strip()
+            if user_input:
+                url = user_input
+                # Auto-save to url_file for subsequent steps
+                os.makedirs(os.path.dirname(os.path.abspath(args.url_file)), exist_ok=True)
+                with open(args.url_file, "a") as f:
+                    f.write(f"\n{args.target}={url}\n")
+                print(f"[OK] Saved URL to '{args.url_file}' for future runs.")
+        
+    if not url:
         raise ValueError(
             f"No URL found for target '{args.target}'. "
             f"Please supply --url '<URL>' or populate '{args.url_file}'."
         )
+
+    # If --url was passed via CLI, ensure it is cached in url_file
+    if args.url and not os.path.exists(args.url_file):
+        os.makedirs(os.path.dirname(os.path.abspath(args.url_file)), exist_ok=True)
+        with open(args.url_file, "a") as f:
+            f.write(f"\n{args.target}={url}\n")
 
     archive_filename = f"{args.target if args.target.startswith('knee_') else 'knee_' + args.target}.tar.xz"
     archive_path = os.path.join(archive_dir, archive_filename)

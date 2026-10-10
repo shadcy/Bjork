@@ -2,15 +2,6 @@
 # ==============================================================================
 # auto_install_knee.sh - One-Command Auto-Installer for FastMRI Knee Experiments
 # ==============================================================================
-# This script automates:
-# 1. Environment activation (~/.conda/envs/bjork)
-# 2. Dependency checks & installation (h5py, pyyaml, scikit-image, etc.)
-# 3. Resumable download of FastMRI multi-coil archive via curl with recovery mode (-C -)
-# 4. Selective extraction of only N volumes (default: 5) to save disk quota & time
-# 5. Volume-level manifest generation (zero slice leakage across splits)
-# 6. Pre-flight GPU & package diagnostics
-# 7. Optional one-click SLURM job submission to PARAM Rudra A100 GPU partition
-# ==============================================================================
 
 set -e
 
@@ -22,47 +13,82 @@ echo "======================================================================"
 echo "          BJORK FastMRI Knee Experiment Auto-Installer                "
 echo "======================================================================"
 
-# 1. Activate Conda Environment if available
-CONDA_ENV_PATH="$HOME/.conda/envs/bjork"
-if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/miniconda3/etc/profile.d/conda.sh"
-elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/anaconda3/etc/profile.d/conda.sh"
-elif [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
-    source "/opt/conda/etc/profile.d/conda.sh"
+# 1. Environment Verification / Activation
+# Check if current Python or conda is already bjork
+if [[ "$CONDA_DEFAULT_ENV" == "bjork" ]] || [[ "$(which python 2>/dev/null)" == *"bjork"* ]]; then
+    echo "Using active conda environment: $(which python)"
+else
+    # Try initializing conda shell hook
+    if command -v conda &> /dev/null; then
+        eval "$(conda shell.bash hook 2> /dev/null || true)"
+        conda activate bjork 2>/dev/null || conda activate "$HOME/.conda/envs/bjork" 2>/dev/null || true
+    fi
+    # Fallback to direct python path if conda activation didn't set it
+    if [ -f "$HOME/.conda/envs/bjork/bin/python" ]; then
+        export PATH="$HOME/.conda/envs/bjork/bin:$PATH"
+    fi
 fi
 
-if command -v conda &> /dev/null && [ -d "$CONDA_ENV_PATH" ]; then
-    echo "Activating conda environment: $CONDA_ENV_PATH"
-    conda activate "$CONDA_ENV_PATH" || source activate "$CONDA_ENV_PATH"
-fi
-
-echo "Using Python: $(which python)"
+PYTHON_BIN="$(which python)"
+echo "Using Python: $PYTHON_BIN"
 
 # 2. Parse arguments
-TARGET="${1:-multicoil_train_batch_0}"
-VOLUMES="${2:-5}"
-SUBMIT_FLAG=""
+TARGET="multicoil_train_batch_0"
+VOLUMES="5"
+URL_ARG=""
+EXTRA_ARGS=()
 
-for arg in "$@"; do
-    case "$arg" in
-        --submit)
-            SUBMIT_FLAG="--submit-slurm"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --target)
+            TARGET="$2"
+            shift 2
+            ;;
+        --volumes|--max-extract)
+            VOLUMES="$2"
+            shift 2
+            ;;
+        --url)
+            URL_ARG="--url $2"
+            shift 2
+            ;;
+        --submit|--submit-slurm)
+            EXTRA_ARGS+=("--submit-slurm")
+            shift
             ;;
         --run-local)
-            SUBMIT_FLAG="--run-local"
+            EXTRA_ARGS+=("--run-local")
+            shift
+            ;;
+        --dry-run)
+            EXTRA_ARGS+=("--dry-run")
+            shift
+            ;;
+        *)
+            # Support positional: $1 = TARGET, $2 = VOLUMES
+            if [[ "$1" != -* ]]; then
+                if [ -z "$POSITIONAL_1" ]; then
+                    TARGET="$1"
+                    POSITIONAL_1=true
+                elif [ -z "$POSITIONAL_2" ]; then
+                    VOLUMES="$1"
+                    POSITIONAL_2=true
+                fi
+            fi
+            shift
             ;;
     esac
 done
 
-echo "Target Split  : $TARGET"
+echo "Target Split       : $TARGET"
 echo "Volumes to extract : $VOLUMES"
 
 # 3. Run Python Auto-Installer
-python scripts/auto_install_knee.py \
+"$PYTHON_BIN" scripts/auto_install_knee.py \
     --target "$TARGET" \
     --max-extract "$VOLUMES" \
-    $SUBMIT_FLAG
+    $URL_ARG \
+    "${EXTRA_ARGS[@]}"
 
 echo ""
 echo "======================================================================"
