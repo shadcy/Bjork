@@ -1,12 +1,11 @@
 # FastMRI multi-coil knee dependencies for BJORK experiment
+# Note: PyTorch must be installed via --index-url https://download.pytorch.org/whl/cu121 (or cu124)
 h5py>=3.7.0
 scikit-image>=0.19.0
 pyyaml>=6.0
 tqdm>=4.64.0
-numpy>=1.21.0
 scipy>=1.7.0
-torch>=1.10.0
-torchvision
 torchkbnufft>=1.4.0
 mirtorch>=0.1.0
 matplotlib>=3.5.0
+

@@ -31,6 +31,11 @@ echo "=========================================================="
 # Create log and output directories
 mkdir -p logs results/logs results/knee_first_run results/knee_first_run/checkpoints results/knee_first_run/reconstructions
 
+# Load cluster CUDA module if available
+if command -v module &> /dev/null; then
+    module load cuda/12.1 2>/dev/null || module load cuda/12.4 2>/dev/null || module load cuda/11.8 2>/dev/null || true
+fi
+
 # 1. Robust Conda Environment & Python Setup
 if command -v conda &> /dev/null; then
     eval "$(conda shell.bash hook 2>/dev/null || true)"
