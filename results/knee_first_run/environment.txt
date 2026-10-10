@@ -1,0 +1,20 @@
+=================================================================
+      PARAM RUDRA / LOCAL ENVIRONMENT DIAGNOSTIC      
+=================================================================
+Host OS         : Linux 4.18.0-513.5.1.el8_9.x86_64 (x86_64)
+Python Executable: /home/IITB/vikram-gadre-r-and-d-group/22b3926/.conda/envs/bjork/bin/python
+Python Version  : 3.10.22
+PyTorch Version : 2.5.1+cu121
+CUDA Available  : True
+CUDA Devices    : 1
+  Device 0        : NVIDIA A100 80GB PCIe (79.14 GB VRAM)
+
+Library Checks:
+  [PASS] NumPy                         : 2.2.6
+  [PASS] SciPy                         : 1.15.3
+  [PASS] h5py (HDF5 for fastMRI)       : 3.16.0
+  [PASS] TorchKbNufft                  : 1.5.1
+  [PASS] MIRTorch                      : 0.4.0
+  [PASS] PyYAML                        : 6.0.3
+  [PASS] scikit-image (for SSIM)       : 0.25.2
+=================================================================

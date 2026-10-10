@@ -1,0 +1,26 @@
+{
+  "experiment_name": "knee_first_run",
+  "acceleration": 4,
+  "sampling_pattern": "Cartesian Equispaced (ACS=0.08)",
+  "train_volumes": [
+    "file1000584.h5"
+  ],
+  "val_volumes": [
+    "file1000658.h5"
+  ],
+  "train_slices_used": 38,
+  "val_slices_used": 30,
+  "training_loss_epoch_1": 0.026501643986098077,
+  "zero_filled_baseline": {
+    "mean_psnr_db": 22.164404024838667,
+    "mean_ssim": 0.5592946709370553,
+    "mean_nmse": 0.20778421966245414
+  },
+  "trained_reconstruction": {
+    "mean_psnr_db": 22.2780702782982,
+    "mean_ssim": 0.5714529733086064,
+    "mean_nmse": 0.20337320052177868
+  },
+  "runtime_seconds": 28.977375268936157,
+  "peak_gpu_memory_gb": 0.6861810684204102
+}
