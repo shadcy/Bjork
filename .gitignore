@@ -20,12 +20,20 @@ eval_results/
 *.tar
 *urls*
 data/
-results/
+results/*
+!results/knee_first_run/
+results/knee_first_run/*
+!results/knee_first_run/*.png
+!results/knee_first_run/*.json
+!results/knee_first_run/*.csv
+!results/knee_first_run/README.md
+!results/knee_first_run/environment.txt
 
 # Plots and results
 test_plots/
 preliminary_results/
 *.png
+!results/knee_first_run/*.png
 
 # OS & IDE
 .vscode/
