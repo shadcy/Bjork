@@ -5,6 +5,8 @@ set -e
 
 echo "=== PARAM Cluster BJORK Runner ==="
 echo "Usage: "
+echo "  bash run_param.sh install               -> Auto-download, selective extract, prepare manifests"
+echo "  bash run_param.sh first-run             -> Submit 1-epoch first run SLURM job"
 echo "  bash run_param.sh verify                -> Run pre-flight verification only"
 echo "  bash run_param.sh demo <h5_file>        -> Run quick forward/backward demo on knee slice"
 echo "  bash run_param.sh reconstruct <h5_file> -> Run first knee reconstruction benchmark"
@@ -15,6 +17,12 @@ MODE="${1:-demo}"
 DATA_PATH="${2:-}"
 
 case "$MODE" in
+    install)
+        bash auto_install_knee.sh
+        ;;
+    first-run)
+        sbatch slurm/knee_first_run.slurm "${DATA_PATH:-/scratch/$USER/fastmri_knee/multicoil_train}"
+        ;;
     verify)
         python verify_setup.py
         ;;
