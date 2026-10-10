@@ -12,8 +12,14 @@
 set -e
 
 # Change to repository root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$SCRIPT_DIR"
+if [ -n "$SLURM_SUBMIT_DIR" ]; then
+    cd "$SLURM_SUBMIT_DIR"
+elif [ -d "$HOME/projects/Bjork" ]; then
+    cd "$HOME/projects/Bjork"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    cd "$SCRIPT_DIR"
+fi
 
 echo "=========================================================="
 echo " Starting FastMRI Knee First Run on PARAM Rudra A100 GPU "
